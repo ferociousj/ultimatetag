@@ -549,17 +549,17 @@ function drawChar(c, ch, x, y, s, fx, fy, ring, acc, opt) {
     if (ch === 15) icing(Lg.lx, Lg.ly - 9 * U, 11 * U);
   };
   const wand = (A, stick, tipCol) => { const tx = A.hx + fx * 12 * U, ty = A.hy - 18 * U + fy * 4 * U; c.strokeStyle = stick; c.lineWidth = 3 * U; c.lineCap = 'round'; c.beginPath(); c.moveTo(A.hx, A.hy); c.lineTo(tx, ty); c.stroke(); starPath(c, tx, ty, 5 * U, tipCol); };
+  // power-ups go in whichever hand is nearer you, so they're never hidden behind the body (the right hand when facing you or away)
+  const holdK = Math.abs(sy) > .3 ? -Math.sign(sy) : -1;
   const drawArm = A => {
     limb(A.shx, 40 * U, A.hx, A.hy - 3 * U, P.armW * U, P.arm);
     if (ch === 4) { circ(c, A.shx, 40 * U, 7 * U, '#5c6676'); c.beginPath(); c.arc(A.shx, 40 * U, 7 * U, 0, 7); ol(); } // shoulder joint
     if (ch === 8) { circ(c, A.hx, A.hy - 5 * U, 8.5 * U, '#7d52e0'); c.beginPath(); c.arc(A.hx, A.hy - 5 * U, 8.5 * U, 0, 7); ol(); } // bell sleeve
     circ(c, A.hx, A.hy, P.handR * U, P.hand); c.beginPath(); c.arc(A.hx, A.hy, P.handR * U, 0, 7); ol();
     if (ch === 15) icing(A.hx, A.hy - 8 * U, 10 * U);
-    if (A.k === -1) {
-      if (held) { c.save(); c.translate(A.hx, A.hy); drawHeld(c, held, fx, fy, 0, 0, b * .8, T, opt.firing); c.restore(); }
-      else if (ch === 8) wand(A, '#6b4325', '#ffd84a');
-    }
-    if (A.k === 1 && ch === 11) wand(A, '#fff6a0', '#fff6a0');
+    if (A.k === holdK && held) { c.save(); c.translate(A.hx, A.hy); drawHeld(c, held, fx, fy, 0, 0, b * 1.25, T, opt.firing); c.restore(); }
+    else if (A.k === -1 && !held && ch === 8) wand(A, '#6b4325', '#ffd84a');
+    if (A.k === 1 && ch === 11 && !(held && holdK === 1)) wand(A, '#fff6a0', '#fff6a0');
   };
   const trunk = (col, rad) => { c.fillStyle = col; c.beginPath(); c.roundRect(-tw / 2, 32 * U, tw, 46 * U, rad * U); c.fill(); ol(); };
   const torso = () => {
@@ -669,7 +669,12 @@ function drawChar(c, ch, x, y, s, fx, fy, ring, acc, opt) {
 
   if (cy > -.25) backBits();
   for (const Lg of legs) drawLeg(Lg);
-  if (ch === 5) { for (const k of [-1, 1]) if (-k * sy < -.3) nub(k); sheet(); for (const k of [-1, 1]) if (-k * sy >= -.3) nub(k); }
+  if (ch === 5) {
+    for (const k of [-1, 1]) if (-k * sy < -.3) nub(k);
+    sheet();
+    for (const k of [-1, 1]) if (-k * sy >= -.3) nub(k);
+    if (held) { const z = -holdK * sy, nx = holdK * cy * 34 * U + sy * Math.max(0, z) * 28 * U; c.save(); c.translate(nx, 50 * U); drawHeld(c, held, fx, fy, 0, 0, b * 1.25, T, opt.firing); c.restore(); } // the ghost holds it in a nub
+  }
   else {
     for (const A of arms) if (A.z < -.25) drawArm(A);
     torso();
