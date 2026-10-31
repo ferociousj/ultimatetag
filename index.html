@@ -653,7 +653,9 @@ function drawChar(c, ch, x, y, s, fx, fy, ring, acc, opt) {
     else if (Math.abs(sy) > .5) { c.strokeStyle = '#8a93a8'; c.lineWidth = 2 * U; c.beginPath(); for (let i = 0; i < 3; i++) { c.moveTo(x0 + 5 * U, (38 + i * 6) * U); c.lineTo(x0 + pw - 5 * U, (38 + i * 6) * U); } c.stroke(); }
   };
   const tank = () => { const tx = -sy * 20 * U; circ(c, tx, 46 * U, 10 * U, '#2c8fb3'); c.beginPath(); c.arc(tx, 46 * U, 10 * U, 0, 7); ol(); circ(c, tx - 3 * U, 42 * U, 3 * U, '#bdf0ff'); };
-  const backBits = () => { if (P.tail) tail(); if (ch === 2) puff(); if (ch === 11) wings(); if (ch === 7) pack(); if (held === 'h') tank(); };
+  // long hair (woman in a vest): hangs behind the shoulders from the front, down her back from behind
+  const hairBack = () => { c.fillStyle = '#6b3b1d'; c.beginPath(); c.roundRect(-sy * b * .15 - b * 1.02, -b * .85, b * 2.04, b * 2.75, b * .9); c.fill(); ol(); };
+  const backBits = () => { if (ch === 13) hairBack(); if (P.tail) tail(); if (ch === 2) puff(); if (ch === 11) wings(); if (ch === 7) pack(); if (held === 'h') tank(); };
   // the ghost is one sheet from head to hem, with little nub arms
   const sheet = () => {
     c.save(); c.globalAlpha *= .93; c.fillStyle = grad('#eef2ff'); c.beginPath(); c.arc(0, 0, b, Math.PI, 0); c.lineTo(b, 82 * U);
@@ -793,7 +795,6 @@ function drawChar(c, ch, x, y, s, fx, fy, ring, acc, opt) {
     }
     case 12: case 13: case 14: { // vest people: hair covers the back of the head (the vest is on the body)
       const skin = ['#c68a5e', '#f0c9a0', '#8d5a3b'][ch - 12], hair = ['#2b1d14', '#6b3b1d', '#1d1b26'][ch - 12];
-      if (ch === 13) { ell(c, -sy * b * .08, b * .45, b * 1.05, b * 1.25, 0, hair); ol(); } // long hair down past the shoulders
       head(skin);
       c.save(); c.beginPath(); c.arc(0, 0, b, 0, 7); c.clip();
       c.fillStyle = hair;
@@ -802,7 +803,9 @@ function drawChar(c, ch, x, y, s, fx, fy, ring, acc, opt) {
       if (cy < .6) { c.beginPath(); c.ellipse(-sy * b * .6, -b * .1, b * (.3 + .75 * back), b * (.8 + .15 * back), 0, 0, 7); c.fill(); } // back of the head
       if (ch === 13) { const [bx] = surf(.5, .62); circ(c, bx, -b * .55, b * .45, hair); }
       if (ch === 14) for (const [a, yy, rr] of [[-.5, -.75, .42], [.1, -.85, .45], [.65, -.7, .4]]) circ(c, Math.sin(yaw + a) * b * .75, yy * b, rr * b, hair);
-      c.restore(); c.beginPath(); c.arc(0, 0, b, 0, 7); ol(); eyes();
+      c.restore(); c.beginPath(); c.arc(0, 0, b, 0, 7); ol();
+      if (ch === 13) for (const k of [-1, 1]) { const [lx, z] = surf(k * 1.3, .92); if (z < -.15) continue; ell(c, lx, b * .4, b * .2, b * .72, 0, hair); ol(); } // locks framing her face, falling over the shoulders
+      eyes();
       onFace(.45, -.2, () => { c.strokeStyle = OL; c.lineWidth = lw; c.beginPath(); c.moveTo(-b * .22, b * .55); c.quadraticCurveTo(0, b * .72, b * .22, b * .55); c.stroke(); }); // smile
       break;
     }
