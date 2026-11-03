@@ -325,7 +325,7 @@ const DEF_CFG = {
   roomSize: 20, speed: 3, sprintMult: 1.5, sprintSecs: 3, sprintCooldown: 2,
   slimeRange: 3, slimeTravel: 6, pistolKnock: 5, hoseKnock: 3,
   itSprintMult: 2, roundSecs: 120, rounds: 3, puStart: 15, puEvery: 10,
-  slimeSlow: 2, slimeSecs: 5, pistolRange: 20, pistolShots: 6, hoseSecs: 4, hoseRange: 6, hoseSpread: 30, tagBump: 3, tagImmune: 2, obstacles: 0.045, branchRange: 8, treeSecs: 2
+  slimeSlow: 2, slimeSecs: 5, pistolRange: 20, pistolShots: 6, hoseSecs: 4, hoseRange: 6, hoseSpread: 30, tagBump: 3, tagImmune: 2, obstacles: 0.045, branchRange: 8, treeSecs: 2, camoSecs: 15
 };
 const CFG_FIELDS = [
   ['doc', 'From the design doc'],
@@ -338,6 +338,7 @@ const CFG_FIELDS = [
   ['pistolKnock', 'Pistol knockback', 'blocks', 0.5, 8, 0.5],
   ['hoseKnock', 'Plasma hose knockback', 'blocks', 0.5, 5, 0.5],
   ['treeSecs', 'Tree time', 'sec', 0.5, 10, 0.5],
+  ['camoSecs', 'Camouflage time', 'sec', 1, 120, 1],
   ['extra', 'Extra tuning'],
   ['itSprintMult', 'It sprint stat', '× normal', 1, 4, 0.5],
   ['tagBump', 'Tag bump', 'blocks each', 0, 8, 0.5],
@@ -1258,7 +1259,7 @@ function startGame(pl, mode) {
   H.G = {
     ep: H.G.ep, ph: 'count', mode, gid: Math.random().toString(36).slice(2, 8), seed: (Math.random() * 2 ** 31) | 0, cfg,
     pl: pl.map(p => p.peer), nm: pl.map(p => p.pr.nm), ch: pl.map(p => p.pr.ch), bp: pl.map(() => 0), bots: H.G.bots || [], bs: H.G.bs || 0, rd: 0, n: 0, st: pl.map(() => [0, 0, 0]), rs: pl.map(() => [0, 0, 0]),
-    hl: pl.map(() => 0), am: pl.map(() => 0), pu: [], pj: [], sl: [], fx: [], tg: [], it: -1, im: pl.map(() => 0), tr: pl.map(() => 0), cm: pl.map(() => 0), sp: []
+    hl: pl.map(() => 0), am: pl.map(() => 0), pu: [], pj: [], sl: [], fx: [], tg: [], it: -1, im: pl.map(() => 0), tr: pl.map(() => 0), cm: pl.map(() => 0), ct: pl.map(() => 0), sp: []
   };
   H.phaseEnd = now() + 3000; H.proj = {}; H.cmPos = {};
 }
@@ -1275,7 +1276,7 @@ function beginRound() {
   G.rs = G.pl.map(() => [0, 0, 0]); G.hl = G.pl.map(() => 0); G.am = G.pl.map(() => 0); G.pu = []; G.pj = []; G.sl = []; G.fx = []; G.tg = []; H.proj = {};
   const present = presentIdx();
   G.it = G.mode === 'classic' && present.length ? present[Math.floor(Math.random() * present.length)] : -1; G.im = G.pl.map(() => 0); H.pairCd = {};
-  G.tr = G.pl.map(() => 0); G.cm = G.pl.map(() => 0); H.cmPos = {};
+  G.tr = G.pl.map(() => 0); G.cm = G.pl.map(() => 0); G.ct = G.pl.map(() => 0); H.cmPos = {};
 }
 function presentIdx() { const ids = new Set(Net.peers().map(p => p.peer)); return H.G.pl.map((p, i) => ids.has(p) || isBot(p) ? i : -1).filter(i => i >= 0); }
 function simulate(t, dt, byPeer) {
@@ -1288,10 +1289,13 @@ function simulate(t, dt, byPeer) {
   // immunity counts down; the tagger can't be tagged while it lasts
   G.im = (G.im || G.pl.map(() => 0)).map(v => Math.max(0, Math.round(v - dt)));
   const immune = j => G.im[j] > 0;
-  // trees count down; camouflage lasts until that player moves
+  // trees count down; camouflage lasts until that player moves or its timer runs out
   G.tr = (G.tr || G.pl.map(() => 0)).map(v => Math.max(0, Math.round(v - dt))); G.cm = G.cm || G.pl.map(() => 0); H.cmPos = H.cmPos || {};
+  G.ct = (G.ct || G.pl.map(() => 0)).map((v, i) => G.cm[i] ? Math.max(0, Math.round(v - dt)) : 0);
   for (let i = 0; i < P.length; i++) {
-    if (!G.cm[i]) { delete H.cmPos[i]; continue; } const p = P[i]; if (!p) continue;
+    if (!G.cm[i]) { delete H.cmPos[i]; continue; }
+    if (G.ct[i] <= 0) { G.cm[i] = 0; delete H.cmPos[i]; continue; } // time's up: back to a regular player
+    const p = P[i]; if (!p) continue;
     const at = H.cmPos[i] || (H.cmPos[i] = [p.x, p.y]);
     if (Math.hypot(p.x - at[0], p.y - at[1]) > .15) { G.cm[i] = 0; delete H.cmPos[i]; }
   }
@@ -1395,7 +1399,7 @@ function knock(j, dx, dy, d) {
 function camouflage(i, p) {
   const G = H.G, m = hostMap(), cell = camoCell(m, p.x, p.y);
   if (cell < 0 || G.cm.some((v, j) => j !== i && v === cell + 1)) return false;
-  G.cm[i] = cell + 1; G.hl[i] = 0; H.cmPos[i] = [p.x, p.y]; return true;
+  G.cm[i] = cell + 1; G.hl[i] = 0; H.cmPos[i] = [p.x, p.y]; G.ct = G.ct || G.pl.map(() => 0); G.ct[i] = G.cfg.camoSecs * 1000; return true;
 }
 function slime(x, y) { // n×n square centred on where it burst; z = [id, left, top, ms left]
   const G = H.G, n = G.cfg.slimeRange;
@@ -1673,7 +1677,7 @@ function paintTile(c, x, y, o, same, s) {
   if (!same(x - 1, y)) c.fillRect(x * s, y * s, w, s);
 }
 // a camouflaged player: an extra block of the furniture beside them, seams and all repainted so nothing gives it away
-function drawCamo(c, cell, s, mine, ring, t) {
+function drawCamo(c, cell, s, mine, ring, t, left) {
   const N = map.N, x = cell % N, y = (cell / N) | 0;
   const nb = [[x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]].find(([a, b]) => furnitureAt(map, a, b));
   const o = nb ? map.oid[nb[1] * N + nb[0]] : 0;
@@ -1683,11 +1687,11 @@ function drawCamo(c, cell, s, mine, ring, t) {
     if (xx === x && yy === y) paintTile(c, xx, yy, o, same, s);
     else if (furnitureAt(map, xx, yy)) { const oo = map.oid[yy * N + xx]; paintTile(c, xx, yy, oo, oo === o ? same : sameFurniture(oo), s); }
   }
-  if (mine) { // only you can see where you are
-    c.save(); c.strokeStyle = ring; c.lineWidth = Math.max(1.5, s * .08); c.setLineDash([s * .2, s * .14]); c.lineDashOffset = -t / 60;
-    c.strokeRect(x * s + s * .1, y * s + s * .1, s * .8, s * .8); c.restore();
+  if (mine) { // only you can see where you are; the outline blinks when time's nearly up
+    if (!(left < 3000 && Math.floor(t / 150) % 2)) { c.save(); c.strokeStyle = ring; c.lineWidth = Math.max(1.5, s * .08); c.setLineDash([s * .2, s * .14]); c.lineDashOffset = -t / 60;
+    c.strokeRect(x * s + s * .1, y * s + s * .1, s * .8, s * .8); c.restore(); }
     c.font = `600 ${Math.max(9, s * .62)}px "Atkinson Hyperlegible", system-ui, sans-serif`; c.textAlign = 'center';
-    c.lineWidth = 3 * dpr; c.strokeStyle = 'rgba(10,12,22,.8)'; c.strokeText('You (hidden)', (x + .5) * s, (y - .25) * s); c.fillStyle = '#ffc94a'; c.fillText('You (hidden)', (x + .5) * s, (y - .25) * s);
+    c.lineWidth = 3 * dpr; c.strokeStyle = 'rgba(10,12,22,.8)'; const lbl = `You (hidden ${Math.ceil((left || 0) / 1000)}s)`; c.strokeText(lbl, (x + .5) * s, (y - .25) * s); c.fillStyle = '#ffc94a'; c.fillText(lbl, (x + .5) * s, (y - .25) * s);
   }
 }
 // a player hit by a tree branch: a little tree with their eyes peeking out of the leaves; the ring shows time left
@@ -1752,7 +1756,7 @@ function draw(t) {
   // power-ups
   for (const u of (G.pu || [])) drawPU(c, u[1], u[2] * s, u[3] * s, s, t);
   // camouflaged players look exactly like furniture (except to themselves)
-  if (G.ph === 'play' && G.cm) G.cm.forEach((v, i) => { if (v > 0) drawCamo(c, v - 1, s, i === myIdx, RINGS[i % 16], t); });
+  if (G.ph === 'play' && G.cm) G.cm.forEach((v, i) => { if (v > 0) drawCamo(c, v - 1, s, i === myIdx, RINGS[i % 16], t, G.ct ? G.ct[i] : 0); });
   // players
   const list = everyone(G), byPeer = {}; for (const p of list) byPeer[p.peer] = p;
   const plist = G.pl.map(peer => byPeer[peer]).filter(Boolean);
@@ -2028,7 +2032,7 @@ function updateGameUI() {
   const role = el('hudRole');
   if (myIdx < 0) { role.textContent = 'Watching. You join the next game.'; role.dataset.k = 'watch'; }
   else if (G.ph === 'play' && G.tr && G.tr[myIdx] > 0) { role.textContent = `You're a tree for ${(G.tr[myIdx] / 1000).toFixed(1)}s`; role.dataset.k = 'tree'; }
-  else if (G.ph === 'play' && G.cm && G.cm[myIdx] > 0) { role.textContent = 'Camouflaged · move to break cover'; role.dataset.k = 'camo'; }
+  else if (G.ph === 'play' && G.cm && G.cm[myIdx] > 0) { role.textContent = `Camouflaged · ${Math.ceil(((G.ct && G.ct[myIdx]) || 0) / 1000)}s left · move to break cover`; role.dataset.k = 'camo'; }
   else if (G.ph === 'play' && G.im && G.im[myIdx] > 0 && !isIt) { role.textContent = `Safe for ${(G.im[myIdx] / 1000).toFixed(1)}s · can't tag yet`; role.dataset.k = 'safe'; }
   else if (classic) {
     const itp = Net.peers().find(p => p.peer === G.pl[G.it]);
